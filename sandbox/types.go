@@ -12,41 +12,49 @@ import (
 	"github.com/Trystan-SA/emberbox/tool"
 )
 
-// Mode selects how the Pool runs tools.
+// Mode selects the default Backend when Config.Backend is nil.
 type Mode string
 
 const (
-	// ModeFirecracker runs each task inside a Firecracker microVM.
+	// ModeFirecracker selects the default FirecrackerBackend.
 	ModeFirecracker Mode = "firecracker"
-	// ModeLocal runs tools in the host process. NOT isolated — dev/test only.
+	// ModeLocal selects the default LocalBackend. NOT isolated — dev/test only.
 	ModeLocal Mode = "local"
 )
 
 // Config configures a Pool.
 type Config struct {
-	// Mode is "local" (default) or "firecracker".
+	// Backend, if non-nil, drives the Pool. Lets callers plug in their own
+	// isolation backend (e.g. a third-party Firecracker, cloud-hypervisor,
+	// or kata implementation). When nil, Mode picks one of the built-ins.
+	Backend Backend
+	// Mode picks a default Backend when Backend is nil. Defaults to ModeLocal.
 	Mode Mode
-	// PoolSize is the number of pre-booted warm VMs (firecracker only).
+	// PoolSize is the number of sandboxes to pre-boot at startup. Backends for
+	// which Boot is expensive (firecracker) benefit; LocalBackend ignores it
+	// in practice (Boot is constant-time).
 	PoolSize int
-	// KernelPath is the guest kernel image (firecracker only).
+	// KernelPath is the guest kernel image. Used only when Backend is nil and
+	// Mode == ModeFirecracker.
 	KernelPath string
-	// RootfsPath is the guest root filesystem (firecracker only).
+	// RootfsPath is the guest root filesystem. Used only when Backend is nil
+	// and Mode == ModeFirecracker.
 	RootfsPath string
-	// DefaultMemoryMB applies to firecracker allocations that omit MemoryMB.
+	// DefaultMemoryMB applies to allocations that omit MemoryMB.
 	DefaultMemoryMB int
-	// DefaultVCPUs applies to firecracker allocations that omit VCPUs.
+	// DefaultVCPUs applies to allocations that omit VCPUs.
 	DefaultVCPUs int
 	// DefaultTimeout applies to allocations that omit Timeout.
 	DefaultTimeout time.Duration
-	// Tools is the registry the local executor dispatches against. Required
-	// when Mode == ModeLocal; ignored when Mode == ModeFirecracker (the in-VM
-	// agent owns its own registry inside the guest).
+	// Tools is the registry the default LocalBackend dispatches against.
+	// Required when Backend is nil and Mode == ModeLocal; ignored otherwise
+	// (in firecracker mode the in-VM agent owns its own registry).
 	Tools *tool.Registry
 	// Logger is optional. Defaults to slog.Default() when nil.
 	Logger *slog.Logger
 }
 
-// AllocRequest configures a single VM allocation.
+// AllocRequest configures a single sandbox allocation.
 type AllocRequest struct {
 	MemoryMB           int
 	VCPUs              int

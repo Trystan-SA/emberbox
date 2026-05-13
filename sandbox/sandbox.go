@@ -1,5 +1,5 @@
-// Pool is the host-side orchestrator: in firecracker mode it manages a pool
-// of pre-booted microVMs; in local mode it dispatches in-process.
+// Pool is the host-side orchestrator. It owns a warm pool of pre-booted
+// sandboxes and dispatches Allocate/Execute/Release calls to a Backend.
 package sandbox
 
 import (
@@ -11,73 +11,48 @@ import (
 	"os"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-// Pool manages tool execution environments.
+// Pool manages tool execution environments via a Backend.
 type Pool struct {
-	cfg    Config
-	mode   Mode
-	log    *slog.Logger
-	local  *localExecutor
-	mu     sync.Mutex
-	pool   []*vm
-	active map[string]*vm
+	cfg     Config
+	backend Backend
+	log     *slog.Logger
+	mu      sync.Mutex
+	warm    []Handle
+	active  map[string]*allocation
 }
 
-type status string
-
-const (
-	vmReady    status = "ready"
-	vmRunning  status = "running"
-	vmStopping status = "stopping"
-)
-
-type vm struct {
-	id        string
-	status    status
-	cfg       AllocRequest
-	bootedAt  time.Time
-	agentAddr string
-	env       map[string]string
+// allocation pairs a Backend Handle with the AllocRequest it was booted for.
+type allocation struct {
+	handle Handle
+	req    AllocRequest
 }
 
-// New constructs a Pool from cfg. Returns an error if cfg is invalid (e.g.
-// local mode without a tool registry).
+// New constructs a Pool from cfg. If cfg.Backend is set it's used as-is;
+// otherwise cfg.Mode (default ModeLocal) selects a built-in backend.
 func New(cfg Config) (*Pool, error) {
-	mode := cfg.Mode
-	if mode == "" {
-		mode = ModeLocal
-	}
-	if mode != ModeLocal && mode != ModeFirecracker {
-		return nil, fmt.Errorf("emberbox/sandbox: unknown mode %q", mode)
-	}
 	log := cfg.Logger
 	if log == nil {
 		log = slog.Default()
 	}
 
+	backend, err := selectBackend(cfg, log)
+	if err != nil {
+		return nil, err
+	}
+
 	p := &Pool{
-		cfg:    cfg,
-		mode:   mode,
-		log:    log,
-		active: make(map[string]*vm),
+		cfg:     cfg,
+		backend: backend,
+		log:     log,
+		active:  make(map[string]*allocation),
 	}
 
-	if mode == ModeLocal {
-		if cfg.Tools == nil {
-			return nil, errors.New("emberbox/sandbox: Config.Tools is required in local mode")
-		}
-		workdir, _ := os.Getwd()
-		p.local = newLocalExecutor(cfg.Tools, workdir)
-		log.Info("emberbox/sandbox: starting in LOCAL mode (no isolation)")
-		return p, nil
-	}
+	log.Info("emberbox/sandbox: starting", "backend", backend.Name(), "pool_size", cfg.PoolSize)
 
-	log.Info("emberbox/sandbox: starting in FIRECRACKER mode", "pool_size", cfg.PoolSize)
-	for i := 0; i < cfg.PoolSize; i++ {
-		v, err := p.bootVM(context.Background(), &AllocRequest{
+	for i := range cfg.PoolSize {
+		h, err := backend.Boot(context.Background(), AllocRequest{
 			MemoryMB: cfg.DefaultMemoryMB,
 			VCPUs:    cfg.DefaultVCPUs,
 		})
@@ -85,36 +60,50 @@ func New(cfg Config) (*Pool, error) {
 			log.Warn("emberbox/sandbox: pre-boot failed", "index", i, "error", err)
 			continue
 		}
-		p.pool = append(p.pool, v)
+		p.warm = append(p.warm, h)
 	}
-	log.Info("emberbox/sandbox: pool ready", "available", len(p.pool))
+	if cfg.PoolSize > 0 {
+		log.Info("emberbox/sandbox: warm pool ready", "available", len(p.warm))
+	}
 	return p, nil
 }
 
+func selectBackend(cfg Config, log *slog.Logger) (Backend, error) {
+	if cfg.Backend != nil {
+		return cfg.Backend, nil
+	}
+	mode := cfg.Mode
+	if mode == "" {
+		mode = ModeLocal
+	}
+	switch mode {
+	case ModeLocal:
+		if cfg.Tools == nil {
+			return nil, errors.New("emberbox/sandbox: Config.Tools is required when using the default LocalBackend")
+		}
+		workdir, _ := os.Getwd()
+		return NewLocalBackend(cfg.Tools, workdir), nil
+	case ModeFirecracker:
+		return NewFirecrackerBackend(FirecrackerConfig{
+			KernelPath:      cfg.KernelPath,
+			RootfsPath:      cfg.RootfsPath,
+			DefaultMemoryMB: cfg.DefaultMemoryMB,
+			DefaultVCPUs:    cfg.DefaultVCPUs,
+			Logger:          log,
+		}), nil
+	default:
+		return nil, fmt.Errorf("emberbox/sandbox: unknown mode %q", mode)
+	}
+}
+
+// Backend returns the Backend driving this Pool. Useful for tests.
+func (p *Pool) Backend() Backend { return p.backend }
+
 // Allocate assigns a sandbox from the warm pool or boots a fresh one.
-// In local mode, returns an opaque ID immediately.
 func (p *Pool) Allocate(ctx context.Context, req AllocRequest) (string, error) {
 	if req.Timeout == 0 {
 		req.Timeout = p.cfg.DefaultTimeout
 	}
-
-	if p.mode == ModeLocal {
-		id := "local-" + uuid.New().String()[:8]
-		p.mu.Lock()
-		p.active[id] = &vm{
-			id:       id,
-			status:   vmRunning,
-			cfg:      req,
-			bootedAt: time.Now(),
-			env:      req.Env,
-		}
-		p.mu.Unlock()
-		return id, nil
-	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	if req.MemoryMB == 0 {
 		req.MemoryMB = p.cfg.DefaultMemoryMB
 	}
@@ -122,112 +111,101 @@ func (p *Pool) Allocate(ctx context.Context, req AllocRequest) (string, error) {
 		req.VCPUs = p.cfg.DefaultVCPUs
 	}
 
-	if len(p.pool) > 0 {
-		v := p.pool[len(p.pool)-1]
-		p.pool = p.pool[:len(p.pool)-1]
-		v.status = vmRunning
-		v.cfg = req
-		v.env = req.Env
-		p.active[v.id] = v
-		go p.replenishPool()
-		p.log.Debug("emberbox/sandbox: allocated VM from pool", "vm_id", v.id)
-		return v.id, nil
+	p.mu.Lock()
+	if len(p.warm) > 0 {
+		h := p.warm[len(p.warm)-1]
+		p.warm = p.warm[:len(p.warm)-1]
+		p.active[h.ID()] = &allocation{handle: h, req: req}
+		p.mu.Unlock()
+		go p.replenishWarmPool()
+		p.log.Debug("emberbox/sandbox: allocated from warm pool", "id", h.ID(), "backend", p.backend.Name())
+		return h.ID(), nil
 	}
+	p.mu.Unlock()
 
-	p.log.Warn("emberbox/sandbox: pool exhausted, booting on-demand")
-	v, err := p.bootVM(ctx, &req)
+	h, err := p.backend.Boot(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("emberbox/sandbox: boot vm: %w", err)
+		return "", fmt.Errorf("emberbox/sandbox: boot: %w", err)
 	}
-	v.status = vmRunning
-	p.active[v.id] = v
-	return v.id, nil
+	p.mu.Lock()
+	p.active[h.ID()] = &allocation{handle: h, req: req}
+	p.mu.Unlock()
+	p.log.Debug("emberbox/sandbox: allocated fresh sandbox", "id", h.ID(), "backend", p.backend.Name())
+	return h.ID(), nil
 }
 
 // Execute dispatches a tool call to the named sandbox.
-func (p *Pool) Execute(ctx context.Context, vmID, toolName string, input json.RawMessage) (*ExecResult, error) {
+func (p *Pool) Execute(ctx context.Context, id, toolName string, input json.RawMessage) (*ExecResult, error) {
 	p.mu.Lock()
-	v, ok := p.active[vmID]
+	a, ok := p.active[id]
 	p.mu.Unlock()
 	if !ok {
-		return nil, fmt.Errorf("emberbox/sandbox: %w: %s", ErrVMNotFound, vmID)
+		return nil, fmt.Errorf("emberbox/sandbox: %w: %s", ErrVMNotFound, id)
 	}
 
-	execCtx, cancel := context.WithTimeout(ctx, v.cfg.Timeout)
-	defer cancel()
-
-	if p.mode == ModeLocal {
-		return p.local.Execute(execCtx, toolName, input, v.env)
+	execCtx := ctx
+	if a.req.Timeout > 0 {
+		var cancel context.CancelFunc
+		execCtx, cancel = context.WithTimeout(ctx, a.req.Timeout)
+		defer cancel()
 	}
 
-	if len(v.env) > 0 {
-		p.log.Debug("emberbox/sandbox: env injection deferred (firecracker mode)", "vm_id", v.id, "env_count", len(v.env))
-	}
 	start := time.Now()
-	result, err := p.callAgent(execCtx, v, toolName, input)
+	result, err := p.backend.Exec(execCtx, a.handle, toolName, input)
 	if err != nil {
-		return nil, fmt.Errorf("emberbox/sandbox: agent call: %w", err)
+		return nil, fmt.Errorf("emberbox/sandbox: exec: %w", err)
 	}
-	result.DurationMS = time.Since(start).Milliseconds()
+	if result.DurationMS == 0 {
+		result.DurationMS = time.Since(start).Milliseconds()
+	}
 	return result, nil
 }
 
 // Release tears down or returns to pool. Idempotent.
-func (p *Pool) Release(ctx context.Context, vmID string) {
+func (p *Pool) Release(ctx context.Context, id string) {
 	p.mu.Lock()
-	v, ok := p.active[vmID]
+	a, ok := p.active[id]
 	if ok {
-		delete(p.active, vmID)
+		delete(p.active, id)
 	}
 	p.mu.Unlock()
 
 	if !ok {
 		return
 	}
-
-	if p.mode == ModeLocal {
-		p.log.Debug("emberbox/sandbox: released local executor", "vm_id", vmID)
-		return
+	if err := p.backend.Destroy(ctx, a.handle); err != nil {
+		p.log.Error("emberbox/sandbox: destroy", "id", id, "error", err)
 	}
-
-	v.status = vmStopping
-	if err := p.destroyVM(ctx, v); err != nil {
-		p.log.Error("emberbox/sandbox: destroy vm", "vm_id", vmID, "error", err)
-	}
-	p.log.Debug("emberbox/sandbox: released vm", "vm_id", vmID)
+	p.log.Debug("emberbox/sandbox: released", "id", id, "backend", p.backend.Name())
 }
 
-// Shutdown stops all active VMs and drains the pool.
+// Shutdown stops all active sandboxes and drains the warm pool.
 func (p *Pool) Shutdown(ctx context.Context) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
+	active := p.active
+	warm := p.warm
+	p.active = make(map[string]*allocation)
+	p.warm = nil
+	p.mu.Unlock()
 
-	if p.mode == ModeLocal {
-		p.active = make(map[string]*vm)
-		p.log.Info("emberbox/sandbox: local pool shut down")
-		return
-	}
-
-	for id, v := range p.active {
-		if err := p.destroyVM(ctx, v); err != nil {
-			p.log.Error("emberbox/sandbox: shutdown destroy", "vm_id", id, "error", err)
+	for id, a := range active {
+		if err := p.backend.Destroy(ctx, a.handle); err != nil {
+			p.log.Error("emberbox/sandbox: shutdown destroy active", "id", id, "error", err)
 		}
 	}
-	for _, v := range p.pool {
-		if err := p.destroyVM(ctx, v); err != nil {
-			p.log.Error("emberbox/sandbox: shutdown destroy pooled", "vm_id", v.id, "error", err)
+	for _, h := range warm {
+		if err := p.backend.Destroy(ctx, h); err != nil {
+			p.log.Error("emberbox/sandbox: shutdown destroy warm", "id", h.ID(), "error", err)
 		}
 	}
-	p.active = make(map[string]*vm)
-	p.pool = nil
-	p.log.Info("emberbox/sandbox: pool shut down")
+	p.log.Info("emberbox/sandbox: pool shut down", "backend", p.backend.Name())
 }
 
-// Status returns the current pool/active counts.
-func (p *Pool) Status() (poolSize, activeCount int) {
+// Status returns the current warm-pool size and active count.
+func (p *Pool) Status() (warmSize, activeCount int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return len(p.pool), len(p.active)
+	return len(p.warm), len(p.active)
 }
 
 // DefaultTimeout returns the configured per-task default.
@@ -235,41 +213,13 @@ func (p *Pool) DefaultTimeout() time.Duration {
 	return p.cfg.DefaultTimeout
 }
 
-// --- Firecracker internals (only used when mode == ModeFirecracker) ---
-
-func (p *Pool) bootVM(ctx context.Context, req *AllocRequest) (*vm, error) {
-	id := uuid.New().String()[:12]
-	p.log.Debug("emberbox/sandbox: booting vm", "vm_id", id, "memory_mb", req.MemoryMB, "vcpus", req.VCPUs)
-
-	v := &vm{
-		id:        id,
-		status:    vmReady,
-		cfg:       *req,
-		bootedAt:  time.Now(),
-		agentAddr: fmt.Sprintf("vsock://%s:%d", id, 10000),
-		env:       req.Env,
-	}
-	// Firecracker SDK calls land here in a follow-up.
-	return v, nil
-}
-
-func (p *Pool) destroyVM(ctx context.Context, v *vm) error {
-	p.log.Debug("emberbox/sandbox: destroying vm", "vm_id", v.id)
-	// Firecracker shutdown lands here in a follow-up.
-	return nil
-}
-
-func (p *Pool) callAgent(ctx context.Context, v *vm, toolName string, input json.RawMessage) (*ExecResult, error) {
-	return nil, errors.New("emberbox/sandbox: firecracker agent communication not yet implemented")
-}
-
-func (p *Pool) replenishPool() {
+func (p *Pool) replenishWarmPool() {
 	p.mu.Lock()
-	needed := p.cfg.PoolSize - len(p.pool)
+	needed := p.cfg.PoolSize - len(p.warm)
 	p.mu.Unlock()
 
-	for i := 0; i < needed; i++ {
-		v, err := p.bootVM(context.Background(), &AllocRequest{
+	for range needed {
+		h, err := p.backend.Boot(context.Background(), AllocRequest{
 			MemoryMB: p.cfg.DefaultMemoryMB,
 			VCPUs:    p.cfg.DefaultVCPUs,
 		})
@@ -278,7 +228,7 @@ func (p *Pool) replenishPool() {
 			return
 		}
 		p.mu.Lock()
-		p.pool = append(p.pool, v)
+		p.warm = append(p.warm, h)
 		p.mu.Unlock()
 	}
 }

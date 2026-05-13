@@ -1,6 +1,7 @@
 # Emberbox
 
-Firecracker microVM sandboxes for LLM agents in Go — one VM per session, with built-in tools (bash, file ops, web fetch) and an extensible tool/agent API.
+Firecracker microVM sandboxes for LLM agents in Go.
+One VM per session, with built-in tools (bash, file ops, web fetch) and an extensible tool/agent API.
 
 > **Status:** v0.1. Local mode is functional and tested. Firecracker mode wires the orchestrator and agent but the SDK calls are stubs — the same code path that ships in ForgeBox today. Real Firecracker integration is the v0.2 milestone.
 
@@ -98,10 +99,50 @@ func TestMyDispatcher(t *testing.T) {
 }
 ```
 
+## Examples
+
+Runnable examples live under [`examples/`](./examples):
+
+- [`examples/lifecycle`](./examples/lifecycle) — allocate a sandbox, list active sandboxes via `Pool.Status`, run a bash command, release.
+- [`examples/customtool`](./examples/customtool) — register a custom `tool.Tool` alongside the built-ins and dispatch it.
+- [`examples/custombackend`](./examples/custombackend) — plug a custom `sandbox.Backend` into the Pool (the same seam Firecracker slots into).
+
+```bash
+go run ./examples/lifecycle
+go run ./examples/customtool
+go run ./examples/custombackend
+```
+
+## Backends
+
+`sandbox.Pool` drives any implementation of the `sandbox.Backend` interface:
+
+```go
+type Backend interface {
+    Name() string
+    Boot(ctx context.Context, req AllocRequest) (Handle, error)
+    Exec(ctx context.Context, h Handle, toolName string, input json.RawMessage) (*ExecResult, error)
+    Destroy(ctx context.Context, h Handle) error
+}
+```
+
+Built-ins:
+- `sandbox.NewLocalBackend(r, workdir)` — in-process dispatch. Selected by `Mode: ModeLocal` (the default).
+- `sandbox.NewFirecrackerBackend(cfg)` — Firecracker microVMs. Selected by `Mode: ModeFirecracker`. **Stubbed today** — `Boot` returns a handle but no VMM is launched, and `Exec` returns `ErrFirecrackerNotImplemented`. The real `firecracker-go-sdk` + vsock impl lands behind this same interface in v0.2.
+
+To plug in your own (cloud-hypervisor, kata, gVisor, a remote sandbox service, ...), pass it via `Config.Backend`:
+
+```go
+pool, _ := sandbox.New(sandbox.Config{
+    Backend:        myBackend,
+    DefaultTimeout: 30 * time.Second,
+})
+```
+
 ## Packages
 
 - `tool/` — shared `Tool` interface, `Result`, `Registry`. Both `sandbox` and `agent` import this.
-- `sandbox/` — host-side: `Pool`, `Allocate`, `Execute`, `Release`, `Shutdown`.
+- `sandbox/` — host-side: `Pool`, `Allocate`, `Execute`, `Release`, `Shutdown`, plus the pluggable `Backend` interface and built-in `LocalBackend` / `FirecrackerBackend`.
 - `sandbox/sandboxtest/` — `NewFake` helper for downstream tests.
 - `agent/` — guest-side: `Agent.Serve` listens for tool requests on a `net.Listener`.
 - `tools/` — built-in `Tool` implementations: bash, file_read, file_write, file_edit, glob, grep, web_fetch, plus `RegisterDefaults`.
