@@ -2,7 +2,7 @@
 
 Sandboxes for LLM agents in Go. Pick your isolation level — host process, Docker container, or Firecracker microVM — behind one `sandbox.Backend` interface, with built-in tools (bash, file ops, web fetch) and an extensible tool/agent API.
 
-> **Status:** v0.1. Host mode and Docker mode are functional and tested. Firecracker mode wires the orchestrator and agent but the SDK calls are stubs. Real Firecracker integration is the v0.2 milestone.
+> **Status:** v0.1. Host mode is exercised in CI on every change. Docker mode is functional and has an integration test that runs locally when `emberbox-agent:test` is built (`docker build -t emberbox-agent:test .`); CI does not yet build that image, so the Docker path is verified by hand for now. Firecracker mode wires the orchestrator and agent but the SDK calls are stubs. Real Firecracker integration is the v0.2 milestone.
 
 ## Why
 
