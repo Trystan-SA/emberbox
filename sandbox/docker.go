@@ -76,11 +76,10 @@ func NewDockerBackend(cfg DockerConfig) (*DockerBackend, error) {
 func (*DockerBackend) Name() string { return "docker" }
 
 type dockerHandle struct {
-	id          string // container id (docker's)
-	hostPort    int    // host port mapped to AgentPort
-	containerIP string // unused for now; reserved for --network=user flows
-	env         map[string]string
-	bootedAt    time.Time
+	id       string // container id (docker's)
+	hostPort int    // host port mapped to AgentPort
+	env      map[string]string
+	bootedAt time.Time
 }
 
 func (h *dockerHandle) ID() string { return h.id }
