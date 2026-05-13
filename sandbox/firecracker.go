@@ -79,7 +79,7 @@ func (b *FirecrackerBackend) Boot(_ context.Context, req AllocRequest) (Handle, 
 	if vcpus == 0 {
 		vcpus = b.cfg.DefaultVCPUs
 	}
-	b.log.Debug("emberbox/sandbox: booting vm (stub)", "vm_id", id, "memory_mb", mem, "vcpus", vcpus)
+	b.log.Info("[Emberbox/firecracker] booting microVM (STUB — no real VMM launched)", "vm_id", id, "memory_mb", mem, "vcpus", vcpus)
 	return &firecrackerHandle{
 		id:        id,
 		agentAddr: fmt.Sprintf("vsock://%s:%d", id, 10000),
@@ -97,13 +97,13 @@ func (b *FirecrackerBackend) Exec(_ context.Context, h Handle, _ string, _ json.
 		return nil, fmt.Errorf("emberbox/sandbox: FirecrackerBackend got handle of type %T", h)
 	}
 	if len(fh.env) > 0 {
-		b.log.Debug("emberbox/sandbox: env injection deferred (firecracker stub)", "vm_id", fh.id, "env_count", len(fh.env))
+		b.log.Debug("[Emberbox/firecracker] env injection deferred (stub)", "vm_id", fh.id, "env_count", len(fh.env))
 	}
 	return nil, ErrFirecrackerNotImplemented
 }
 
 // Destroy implements Backend.
 func (b *FirecrackerBackend) Destroy(_ context.Context, h Handle) error {
-	b.log.Debug("emberbox/sandbox: destroying vm (stub)", "vm_id", h.ID())
+	b.log.Debug("[Emberbox/firecracker] destroying microVM (stub)", "vm_id", h.ID())
 	return nil
 }

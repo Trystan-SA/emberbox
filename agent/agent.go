@@ -96,12 +96,12 @@ func (a *Agent) HandleConnection(ctx context.Context, conn net.Conn) {
 	var req Request
 	if err := decoder.Decode(&req); err != nil {
 		if err != io.EOF {
-			a.log.Error("emberbox/agent: decode request", "error", err)
+			a.log.Error("[Emberbox/agent] decode request failed", "error", err)
 		}
 		return
 	}
 
-	a.log.Info("emberbox/agent: executing tool", "tool", req.ToolName)
+	a.log.Info("[Emberbox/agent] executing tool", "tool", req.ToolName, "timeout_seconds", req.TimeoutSeconds)
 	start := time.Now()
 
 	timeout := 60 * time.Second
@@ -115,7 +115,7 @@ func (a *Agent) HandleConnection(ctx context.Context, conn net.Conn) {
 	resp.DurationMS = time.Since(start).Milliseconds()
 
 	if err := encoder.Encode(resp); err != nil {
-		a.log.Error("emberbox/agent: encode response", "error", err)
+		a.log.Error("[Emberbox/agent] encode response failed", "tool", req.ToolName, "error", err)
 	}
 }
 

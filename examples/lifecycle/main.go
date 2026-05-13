@@ -1,6 +1,6 @@
 // Lifecycle example: start a sandbox, list active sandboxes, run a command,
-// release it. Uses local mode so it works without a Firecracker host; the
-// same API works in firecracker mode once that lands — just flip Config.Mode.
+// release it. Uses host mode so it works without docker or firecracker; the
+// same API works in those modes — just flip Config.Mode or pass Config.Backend.
 //
 //	go run ./examples/lifecycle
 package main
@@ -21,7 +21,7 @@ func main() {
 	tools.RegisterDefaults(r)
 
 	pool, err := sandbox.New(sandbox.Config{
-		Mode:           sandbox.ModeLocal,
+		Mode:           sandbox.ModeHost,
 		Tools:          r,
 		DefaultTimeout: 30 * time.Second,
 	})

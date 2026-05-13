@@ -19,20 +19,20 @@ func (s stubTool) Execute(ctx context.Context, in json.RawMessage) (*tool.Result
 	return s.fn(ctx, in)
 }
 
-func newBootedLocalHandle(t *testing.T, b *LocalBackend, env map[string]string) Handle {
+func newBootedHostHandle(t *testing.T, b *HostBackend, env map[string]string) Handle {
 	t.Helper()
 	h, err := b.Boot(context.Background(), AllocRequest{Env: env})
 	require.NoError(t, err)
 	return h
 }
 
-func TestLocalBackend_DispatchesByName(t *testing.T) {
+func TestHostBackend_DispatchesByName(t *testing.T) {
 	r := tool.NewRegistry()
 	r.Register(stubTool{name: "echo", fn: func(_ context.Context, in json.RawMessage) (*tool.Result, error) {
 		return &tool.Result{Content: string(in)}, nil
 	}})
-	b := NewLocalBackend(r, "")
-	h := newBootedLocalHandle(t, b, nil)
+	b := NewHostBackend(r, "")
+	h := newBootedHostHandle(t, b, nil)
 
 	res, err := b.Exec(context.Background(), h, "echo", json.RawMessage(`"hi"`))
 	require.NoError(t, err)
@@ -40,9 +40,9 @@ func TestLocalBackend_DispatchesByName(t *testing.T) {
 	require.Equal(t, `"hi"`, res.Content)
 }
 
-func TestLocalBackend_UnknownToolIsErrorNotErr(t *testing.T) {
-	b := NewLocalBackend(tool.NewRegistry(), "")
-	h := newBootedLocalHandle(t, b, nil)
+func TestHostBackend_UnknownToolIsErrorNotErr(t *testing.T) {
+	b := NewHostBackend(tool.NewRegistry(), "")
+	h := newBootedHostHandle(t, b, nil)
 
 	res, err := b.Exec(context.Background(), h, "nope", nil)
 	require.NoError(t, err)
@@ -50,23 +50,23 @@ func TestLocalBackend_UnknownToolIsErrorNotErr(t *testing.T) {
 	require.Contains(t, res.Content, "unknown tool")
 }
 
-func TestLocalBackend_EnvPropagatedViaContext(t *testing.T) {
+func TestHostBackend_EnvPropagatedViaContext(t *testing.T) {
 	var got map[string]string
 	r := tool.NewRegistry()
 	r.Register(stubTool{name: "envcheck", fn: func(ctx context.Context, _ json.RawMessage) (*tool.Result, error) {
 		got = EnvFromContext(ctx)
 		return &tool.Result{Content: "ok"}, nil
 	}})
-	b := NewLocalBackend(r, "")
-	h := newBootedLocalHandle(t, b, map[string]string{"FOO": "bar"})
+	b := NewHostBackend(r, "")
+	h := newBootedHostHandle(t, b, map[string]string{"FOO": "bar"})
 
 	_, err := b.Exec(context.Background(), h, "envcheck", nil)
 	require.NoError(t, err)
 	require.Equal(t, "bar", got["FOO"])
 }
 
-func TestLocalBackend_RejectsForeignHandle(t *testing.T) {
-	b := NewLocalBackend(tool.NewRegistry(), "")
+func TestHostBackend_RejectsForeignHandle(t *testing.T) {
+	b := NewHostBackend(tool.NewRegistry(), "")
 	_, err := b.Exec(context.Background(), &firecrackerHandle{id: "x"}, "any", nil)
 	require.Error(t, err)
 }

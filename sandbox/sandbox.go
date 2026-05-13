@@ -30,7 +30,7 @@ type allocation struct {
 }
 
 // New constructs a Pool from cfg. If cfg.Backend is set it's used as-is;
-// otherwise cfg.Mode (default ModeLocal) selects a built-in backend.
+// otherwise cfg.Mode (default ModeHost) selects a built-in backend.
 func New(cfg Config) (*Pool, error) {
 	log := cfg.Logger
 	if log == nil {
@@ -49,7 +49,7 @@ func New(cfg Config) (*Pool, error) {
 		active:  make(map[string]*allocation),
 	}
 
-	log.Info("emberbox/sandbox: starting", "backend", backend.Name(), "pool_size", cfg.PoolSize)
+	log.Info("[Emberbox] pool starting", "backend", backend.Name(), "warm_pool_size", cfg.PoolSize)
 
 	for i := range cfg.PoolSize {
 		h, err := backend.Boot(context.Background(), AllocRequest{
@@ -57,13 +57,13 @@ func New(cfg Config) (*Pool, error) {
 			VCPUs:    cfg.DefaultVCPUs,
 		})
 		if err != nil {
-			log.Warn("emberbox/sandbox: pre-boot failed", "index", i, "error", err)
+			log.Warn("[Emberbox] warm-pool pre-boot failed", "index", i, "backend", backend.Name(), "error", err)
 			continue
 		}
 		p.warm = append(p.warm, h)
 	}
 	if cfg.PoolSize > 0 {
-		log.Info("emberbox/sandbox: warm pool ready", "available", len(p.warm))
+		log.Info("[Emberbox] warm pool ready", "available", len(p.warm), "requested", cfg.PoolSize)
 	}
 	return p, nil
 }
@@ -74,15 +74,15 @@ func selectBackend(cfg Config, log *slog.Logger) (Backend, error) {
 	}
 	mode := cfg.Mode
 	if mode == "" {
-		mode = ModeLocal
+		mode = ModeHost
 	}
 	switch mode {
-	case ModeLocal:
+	case ModeHost:
 		if cfg.Tools == nil {
-			return nil, errors.New("emberbox/sandbox: Config.Tools is required when using the default LocalBackend")
+			return nil, errors.New("emberbox/sandbox: Config.Tools is required when using the default HostBackend")
 		}
 		workdir, _ := os.Getwd()
-		return NewLocalBackend(cfg.Tools, workdir), nil
+		return NewHostBackend(cfg.Tools, workdir), nil
 	case ModeFirecracker:
 		return NewFirecrackerBackend(FirecrackerConfig{
 			KernelPath:      cfg.KernelPath,
@@ -118,7 +118,7 @@ func (p *Pool) Allocate(ctx context.Context, req AllocRequest) (string, error) {
 		p.active[h.ID()] = &allocation{handle: h, req: req}
 		p.mu.Unlock()
 		go p.replenishWarmPool()
-		p.log.Debug("emberbox/sandbox: allocated from warm pool", "id", h.ID(), "backend", p.backend.Name())
+		p.log.Debug("[Emberbox] sandbox allocated from warm pool", "id", h.ID(), "backend", p.backend.Name())
 		return h.ID(), nil
 	}
 	p.mu.Unlock()
@@ -130,7 +130,7 @@ func (p *Pool) Allocate(ctx context.Context, req AllocRequest) (string, error) {
 	p.mu.Lock()
 	p.active[h.ID()] = &allocation{handle: h, req: req}
 	p.mu.Unlock()
-	p.log.Debug("emberbox/sandbox: allocated fresh sandbox", "id", h.ID(), "backend", p.backend.Name())
+	p.log.Debug("[Emberbox] sandbox allocated (fresh boot)", "id", h.ID(), "backend", p.backend.Name())
 	return h.ID(), nil
 }
 
@@ -174,9 +174,9 @@ func (p *Pool) Release(ctx context.Context, id string) {
 		return
 	}
 	if err := p.backend.Destroy(ctx, a.handle); err != nil {
-		p.log.Error("emberbox/sandbox: destroy", "id", id, "error", err)
+		p.log.Error("[Emberbox] sandbox destroy failed", "id", id, "backend", p.backend.Name(), "error", err)
 	}
-	p.log.Debug("emberbox/sandbox: released", "id", id, "backend", p.backend.Name())
+	p.log.Debug("[Emberbox] sandbox released", "id", id, "backend", p.backend.Name())
 }
 
 // Shutdown stops all active sandboxes and drains the warm pool.
@@ -190,15 +190,15 @@ func (p *Pool) Shutdown(ctx context.Context) {
 
 	for id, a := range active {
 		if err := p.backend.Destroy(ctx, a.handle); err != nil {
-			p.log.Error("emberbox/sandbox: shutdown destroy active", "id", id, "error", err)
+			p.log.Error("[Emberbox] shutdown: destroy failed (active sandbox)", "id", id, "backend", p.backend.Name(), "error", err)
 		}
 	}
 	for _, h := range warm {
 		if err := p.backend.Destroy(ctx, h); err != nil {
-			p.log.Error("emberbox/sandbox: shutdown destroy warm", "id", h.ID(), "error", err)
+			p.log.Error("[Emberbox] shutdown: destroy failed (warm pool entry)", "id", h.ID(), "backend", p.backend.Name(), "error", err)
 		}
 	}
-	p.log.Info("emberbox/sandbox: pool shut down", "backend", p.backend.Name())
+	p.log.Info("[Emberbox] pool shut down", "backend", p.backend.Name())
 }
 
 // Status returns the current warm-pool size and active count.
@@ -224,7 +224,7 @@ func (p *Pool) replenishWarmPool() {
 			VCPUs:    p.cfg.DefaultVCPUs,
 		})
 		if err != nil {
-			p.log.Warn("emberbox/sandbox: replenish failed", "error", err)
+			p.log.Warn("[Emberbox] warm-pool replenish failed", "backend", p.backend.Name(), "error", err)
 			return
 		}
 		p.mu.Lock()

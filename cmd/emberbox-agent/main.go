@@ -36,16 +36,16 @@ func main() {
 
 	ln, err := net.Listen("tcp", *listenAddr)
 	if err != nil {
-		log.Error("emberbox-agent: listen", "addr", *listenAddr, "error", err)
+		log.Error("[Emberbox/agent] failed to bind listen socket", "addr", *listenAddr, "error", err)
 		os.Exit(1)
 	}
-	log.Info("emberbox-agent: listening", "addr", *listenAddr)
+	log.Info("[Emberbox/agent] listening for host requests", "addr", *listenAddr, "workdir", *workdir)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	if err := a.Serve(ctx, ln); err != nil {
-		log.Error("emberbox-agent: serve", "error", err)
+		log.Error("[Emberbox/agent] serve loop ended unexpectedly", "error", err)
 		os.Exit(1)
 	}
 }
