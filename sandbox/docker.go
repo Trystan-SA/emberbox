@@ -218,9 +218,9 @@ func (b *DockerBackend) Boot(ctx context.Context, req AllocRequest) (Handle, err
 
 // Exec dispatches a tool call to the container's agent.
 func (b *DockerBackend) Exec(ctx context.Context, h Handle, toolName string, input json.RawMessage) (*ExecResult, error) {
-	dh, ok := h.(*dockerHandle)
-	if !ok {
-		return nil, fmt.Errorf("emberbox/sandbox: DockerBackend got handle of type %T", h)
+	dh, err := assertHandle[*dockerHandle](h, "Docker")
+	if err != nil {
+		return nil, err
 	}
 	addr := fmt.Sprintf("127.0.0.1:%d", dh.hostPort)
 
@@ -233,9 +233,9 @@ func (b *DockerBackend) Exec(ctx context.Context, h Handle, toolName string, inp
 
 // Destroy stops and removes the container.
 func (b *DockerBackend) Destroy(ctx context.Context, h Handle) error {
-	dh, ok := h.(*dockerHandle)
-	if !ok {
-		return fmt.Errorf("emberbox/sandbox: DockerBackend got handle of type %T", h)
+	dh, err := assertHandle[*dockerHandle](h, "Docker")
+	if err != nil {
+		return err
 	}
 	return b.stop(ctx, dh.id)
 }

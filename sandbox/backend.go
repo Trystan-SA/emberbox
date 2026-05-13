@@ -7,6 +7,7 @@ package sandbox
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 )
 
 // Backend is the contract every sandbox implementation must satisfy.
@@ -28,4 +29,16 @@ type Backend interface {
 // state they need on their concrete handle type.
 type Handle interface {
 	ID() string
+}
+
+// assertHandle narrows a Handle to the concrete type T expected by a backend.
+// The error message names the backend so a cross-backend handle mix-up is
+// obvious in the log.
+func assertHandle[T Handle](h Handle, backendName string) (T, error) {
+	t, ok := h.(T)
+	if !ok {
+		var zero T
+		return zero, fmt.Errorf("emberbox/sandbox: %sBackend got handle of type %T", backendName, h)
+	}
+	return t, nil
 }

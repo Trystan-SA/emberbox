@@ -26,16 +26,16 @@ func (t *FileReadTool) Name() string { return "file_read" }
 // Execute reads a file and returns its content with line numbers.
 func (t *FileReadTool) Execute(ctx context.Context, input json.RawMessage) (*tool.Result, error) {
 	var in fileReadInput
-	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, fmt.Errorf("invalid input: %w", err)
+	if err := parseInput(input, &in); err != nil {
+		return nil, err
 	}
-	if in.Path == "" {
-		return &tool.Result{Content: "path is required", IsError: true}, nil
+	if res := requireField("path", in.Path); res != nil {
+		return res, nil
 	}
 
 	f, err := os.Open(in.Path)
 	if err != nil {
-		return &tool.Result{Content: fmt.Sprintf("cannot open file: %s", err), IsError: true}, nil
+		return errResult("cannot open file: %s", err), nil
 	}
 	defer func() { _ = f.Close() }()
 
@@ -59,7 +59,7 @@ func (t *FileReadTool) Execute(ctx context.Context, input json.RawMessage) (*too
 	}
 
 	if err := scanner.Err(); err != nil {
-		return &tool.Result{Content: fmt.Sprintf("read error: %s", err), IsError: true}, nil
+		return errResult("read error: %s", err), nil
 	}
 
 	if len(lines) == 0 {

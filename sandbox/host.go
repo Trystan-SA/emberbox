@@ -58,9 +58,9 @@ func (b *HostBackend) Boot(_ context.Context, req AllocRequest) (Handle, error) 
 
 // Exec implements Backend.
 func (b *HostBackend) Exec(ctx context.Context, h Handle, toolName string, input json.RawMessage) (*ExecResult, error) {
-	hh, ok := h.(*hostHandle)
-	if !ok {
-		return nil, fmt.Errorf("emberbox/sandbox: HostBackend got handle of type %T", h)
+	hh, err := assertHandle[*hostHandle](h, "Host")
+	if err != nil {
+		return nil, err
 	}
 
 	t, ok := b.tools.Get(toolName)

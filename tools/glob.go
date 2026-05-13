@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -24,11 +23,11 @@ func (t *GlobTool) Name() string { return "glob" }
 // Execute finds files matching a glob pattern.
 func (t *GlobTool) Execute(ctx context.Context, input json.RawMessage) (*tool.Result, error) {
 	var in globInput
-	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, fmt.Errorf("invalid input: %w", err)
+	if err := parseInput(input, &in); err != nil {
+		return nil, err
 	}
-	if in.Pattern == "" {
-		return &tool.Result{Content: "pattern is required", IsError: true}, nil
+	if res := requireField("pattern", in.Pattern); res != nil {
+		return res, nil
 	}
 
 	base := in.Path
@@ -39,7 +38,7 @@ func (t *GlobTool) Execute(ctx context.Context, input json.RawMessage) (*tool.Re
 	fullPattern := filepath.Join(base, in.Pattern)
 	matches, err := filepath.Glob(fullPattern)
 	if err != nil {
-		return &tool.Result{Content: fmt.Sprintf("glob error: %s", err), IsError: true}, nil
+		return errResult("glob error: %s", err), nil
 	}
 
 	if len(matches) == 0 {

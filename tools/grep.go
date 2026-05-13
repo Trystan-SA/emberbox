@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"os/exec"
 
 	"github.com/Trystan-SA/emberbox/tool"
@@ -26,11 +25,11 @@ func (t *GrepTool) Name() string { return "grep" }
 // Execute searches file contents using ripgrep.
 func (t *GrepTool) Execute(ctx context.Context, input json.RawMessage) (*tool.Result, error) {
 	var in grepInput
-	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, fmt.Errorf("invalid input: %w", err)
+	if err := parseInput(input, &in); err != nil {
+		return nil, err
 	}
-	if in.Pattern == "" {
-		return &tool.Result{Content: "pattern is required", IsError: true}, nil
+	if res := requireField("pattern", in.Pattern); res != nil {
+		return res, nil
 	}
 
 	args := []string{"--color=never", "-n", "--max-count=100"}
@@ -59,7 +58,7 @@ func (t *GrepTool) Execute(ctx context.Context, input json.RawMessage) (*tool.Re
 		if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
 			return &tool.Result{Content: "no matches found"}, nil
 		}
-		return &tool.Result{Content: fmt.Sprintf("grep error: %s", stderr.String()), IsError: true}, nil
+		return errResult("grep error: %s", stderr.String()), nil
 	}
 
 	return &tool.Result{Content: stdout.String()}, nil

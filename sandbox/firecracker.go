@@ -92,9 +92,9 @@ func (b *FirecrackerBackend) Boot(_ context.Context, req AllocRequest) (Handle, 
 
 // Exec implements Backend.
 func (b *FirecrackerBackend) Exec(_ context.Context, h Handle, _ string, _ json.RawMessage) (*ExecResult, error) {
-	fh, ok := h.(*firecrackerHandle)
-	if !ok {
-		return nil, fmt.Errorf("emberbox/sandbox: FirecrackerBackend got handle of type %T", h)
+	fh, err := assertHandle[*firecrackerHandle](h, "Firecracker")
+	if err != nil {
+		return nil, err
 	}
 	if len(fh.env) > 0 {
 		b.log.Debug("[Emberbox/firecracker] env injection deferred (stub)", "vm_id", fh.id, "env_count", len(fh.env))
