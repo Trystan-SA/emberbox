@@ -1,5 +1,5 @@
 // Package sandboxtest provides test helpers for downstream consumers of
-// emberbox/sandbox. NewFake returns a Pool configured in local mode with a
+// emberbox/sandbox. NewFake returns a Pool configured in host mode with a
 // caller-supplied tool registry.
 package sandboxtest
 
@@ -21,7 +21,7 @@ func NewFake(t testing.TB, r *tool.Registry) *sandbox.Pool {
 		r = tool.NewRegistry()
 	}
 	p, err := sandbox.New(sandbox.Config{
-		Mode:           sandbox.ModeLocal,
+		Mode:           sandbox.ModeHost,
 		Tools:          r,
 		DefaultTimeout: 5 * time.Second,
 	})

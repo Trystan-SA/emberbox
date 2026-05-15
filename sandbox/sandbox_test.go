@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newLocalPool(t *testing.T, r *tool.Registry) *Pool {
+func newHostPool(t *testing.T, r *tool.Registry) *Pool {
 	t.Helper()
 	p, err := New(Config{
-		Mode:           ModeLocal,
+		Mode:           ModeHost,
 		Tools:          r,
 		DefaultTimeout: 5 * time.Second,
 	})
@@ -22,12 +22,12 @@ func newLocalPool(t *testing.T, r *tool.Registry) *Pool {
 	return p
 }
 
-func TestPool_LocalMode_AllocateExecuteRelease(t *testing.T) {
+func TestPool_HostMode_AllocateExecuteRelease(t *testing.T) {
 	r := tool.NewRegistry()
 	r.Register(stubTool{name: "echo", fn: func(_ context.Context, in json.RawMessage) (*tool.Result, error) {
 		return &tool.Result{Content: string(in)}, nil
 	}})
-	p := newLocalPool(t, r)
+	p := newHostPool(t, r)
 	defer p.Shutdown(context.Background())
 
 	id, err := p.Allocate(context.Background(), AllocRequest{Timeout: time.Second})
@@ -45,8 +45,8 @@ func TestPool_LocalMode_AllocateExecuteRelease(t *testing.T) {
 	require.ErrorIs(t, err, ErrVMNotFound)
 }
 
-func TestPool_LocalMode_RequiresTools(t *testing.T) {
-	_, err := New(Config{Mode: ModeLocal})
+func TestPool_HostMode_RequiresTools(t *testing.T) {
+	_, err := New(Config{Mode: ModeHost})
 	require.Error(t, err)
 }
 
@@ -55,7 +55,7 @@ func TestPool_UnknownMode(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestPool_DefaultMode_IsLocal(t *testing.T) {
+func TestPool_DefaultMode_IsHost(t *testing.T) {
 	p, err := New(Config{Tools: tool.NewRegistry()})
 	require.NoError(t, err)
 	defer p.Shutdown(context.Background())
@@ -65,7 +65,7 @@ func TestPool_DefaultMode_IsLocal(t *testing.T) {
 }
 
 func TestPool_Status(t *testing.T) {
-	p := newLocalPool(t, tool.NewRegistry())
+	p := newHostPool(t, tool.NewRegistry())
 	defer p.Shutdown(context.Background())
 
 	pool, active := p.Status()
@@ -88,7 +88,7 @@ func TestPool_Execute_ToolErrorReportedAsContent(t *testing.T) {
 	r.Register(stubTool{name: "boom", fn: func(_ context.Context, _ json.RawMessage) (*tool.Result, error) {
 		return nil, errors.New("kaboom")
 	}})
-	p := newLocalPool(t, r)
+	p := newHostPool(t, r)
 	defer p.Shutdown(context.Background())
 
 	id, err := p.Allocate(context.Background(), AllocRequest{Timeout: time.Second})

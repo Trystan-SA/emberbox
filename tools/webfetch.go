@@ -26,11 +26,11 @@ func (t *WebFetchTool) Name() string { return "web_fetch" }
 // Execute fetches the given URL and returns status + body.
 func (t *WebFetchTool) Execute(ctx context.Context, input json.RawMessage) (*tool.Result, error) {
 	var in webFetchInput
-	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, fmt.Errorf("invalid input: %w", err)
+	if err := parseInput(input, &in); err != nil {
+		return nil, err
 	}
-	if in.URL == "" {
-		return &tool.Result{Content: "url is required", IsError: true}, nil
+	if res := requireField("url", in.URL); res != nil {
+		return res, nil
 	}
 	if in.Method == "" {
 		in.Method = "GET"
@@ -40,7 +40,7 @@ func (t *WebFetchTool) Execute(ctx context.Context, input json.RawMessage) (*too
 
 	req, err := http.NewRequestWithContext(ctx, in.Method, in.URL, http.NoBody)
 	if err != nil {
-		return &tool.Result{Content: fmt.Sprintf("invalid request: %s", err), IsError: true}, nil
+		return errResult("invalid request: %s", err), nil
 	}
 	for k, v := range in.Headers {
 		req.Header.Set(k, v)
@@ -48,14 +48,14 @@ func (t *WebFetchTool) Execute(ctx context.Context, input json.RawMessage) (*too
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return &tool.Result{Content: fmt.Sprintf("fetch error: %s", err), IsError: true}, nil
+		return errResult("fetch error: %s", err), nil
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	// Limit response to 1MB.
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return &tool.Result{Content: fmt.Sprintf("read error: %s", err), IsError: true}, nil
+		return errResult("read error: %s", err), nil
 	}
 
 	return &tool.Result{Content: fmt.Sprintf("HTTP %d\n\n%s", resp.StatusCode, string(body))}, nil

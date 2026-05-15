@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"os/exec"
 	"time"
 
@@ -27,11 +26,11 @@ func (t *BashTool) Name() string { return "bash" }
 // Execute runs a shell command and returns its output.
 func (t *BashTool) Execute(ctx context.Context, input json.RawMessage) (*tool.Result, error) {
 	var in bashInput
-	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, fmt.Errorf("invalid input: %w", err)
+	if err := parseInput(input, &in); err != nil {
+		return nil, err
 	}
-	if in.Command == "" {
-		return &tool.Result{Content: "command is required", IsError: true}, nil
+	if res := requireField("command", in.Command); res != nil {
+		return res, nil
 	}
 
 	timeout := 120 * time.Second
@@ -54,10 +53,7 @@ func (t *BashTool) Execute(ctx context.Context, input json.RawMessage) (*tool.Re
 	}
 
 	if err != nil {
-		return &tool.Result{
-			Content: fmt.Sprintf("exit code %d\n%s", cmd.ProcessState.ExitCode(), output),
-			IsError: true,
-		}, nil
+		return errResult("exit code %d\n%s", cmd.ProcessState.ExitCode(), output), nil
 	}
 
 	return &tool.Result{Content: output}, nil

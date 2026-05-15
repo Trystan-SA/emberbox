@@ -19,8 +19,8 @@ import (
 )
 
 // auditBackend wraps an inner Backend and counts every call. In production
-// you'd swap the inner LocalBackend for a real FirecrackerBackend (or any
-// other sandbox.Backend implementation).
+// you'd swap the inner HostBackend for a real DockerBackend or
+// FirecrackerBackend (or any other sandbox.Backend implementation).
 type auditBackend struct {
 	inner    sandbox.Backend
 	boots    atomic.Int64
@@ -63,7 +63,7 @@ func main() {
 	tools.RegisterDefaults(r)
 
 	backend := &auditBackend{
-		inner: sandbox.NewLocalBackend(r, ""),
+		inner: sandbox.NewHostBackend(r, ""),
 	}
 
 	pool, err := sandbox.New(sandbox.Config{

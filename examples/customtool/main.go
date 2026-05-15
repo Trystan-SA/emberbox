@@ -38,7 +38,7 @@ func main() {
 	r.Register(greetTool{})
 
 	pool, err := sandbox.New(sandbox.Config{
-		Mode:           sandbox.ModeLocal,
+		Mode:           sandbox.ModeHost,
 		Tools:          r,
 		DefaultTimeout: 5 * time.Second,
 	})
