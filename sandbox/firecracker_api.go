@@ -2,8 +2,7 @@
 // Firecracker VMM REST API. It deliberately avoids firecracker-go-sdk: the
 // surface we need (machine-config, boot-source, drives, vsock, actions) is
 // tiny, and pulling the SDK would drag containerd and friends into the
-// dependency tree — inconsistent with the "shell out instead of vendor the
-// Docker SDK" choice in DockerBackend.
+// dependency tree.
 
 package sandbox
 

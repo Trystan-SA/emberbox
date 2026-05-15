@@ -1,11 +1,11 @@
 // agentClient is the host-side counterpart of agent.Agent: it opens a
-// connection to an emberbox-agent (running in a container, microVM, or
-// anywhere reachable over a net.Conn), sends one agent.Request, and decodes
-// one agent.Response.
+// connection to an emberbox-agent (running in a microVM or anywhere
+// reachable over a net.Conn), sends one agent.Request, and decodes one
+// agent.Response.
 //
-// DockerBackend uses dialAgent over TCP; FirecrackerBackend uses
-// dialAgentVsockUDS which goes through Firecracker's vsock UDS multiplexer.
-// Both funnel into agentRoundTrip once the connection is established.
+// FirecrackerBackend uses dialAgentVsockUDS, which goes through
+// Firecracker's vsock UDS multiplexer and funnels into agentRoundTrip
+// once the connection is established.
 
 package sandbox
 
@@ -33,16 +33,6 @@ type agentResponse struct {
 	Output     string `json:"output"`
 	IsError    bool   `json:"is_error"`
 	DurationMS int64  `json:"duration_ms"`
-}
-
-// dialAgent dials addr (TCP) and round-trips one agent request/response.
-func dialAgent(ctx context.Context, addr, toolName string, input json.RawMessage, timeout time.Duration) (*ExecResult, error) {
-	d := net.Dialer{}
-	conn, err := d.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return nil, fmt.Errorf("dial agent: %w", err)
-	}
-	return agentRoundTrip(ctx, conn, toolName, input, timeout)
 }
 
 // dialAgentVsockUDS dials the Firecracker vsock UDS multiplexer at udsPath,
@@ -127,29 +117,6 @@ func agentRoundTrip(ctx context.Context, conn net.Conn, toolName string, input j
 		IsError:    resp.IsError,
 		DurationMS: resp.DurationMS,
 	}, nil
-}
-
-// waitForAgent polls addr until a TCP connection succeeds or ctx expires.
-// Used after launching a container to know when the in-container agent is
-// ready to accept requests.
-func waitForAgent(ctx context.Context, addr string, interval time.Duration) error {
-	if interval <= 0 {
-		interval = 50 * time.Millisecond
-	}
-	t := time.NewTicker(interval)
-	defer t.Stop()
-	for {
-		conn, err := (&net.Dialer{Timeout: interval}).DialContext(ctx, "tcp", addr)
-		if err == nil {
-			_ = conn.Close()
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("waitForAgent %s: %w", addr, ctx.Err())
-		case <-t.C:
-		}
-	}
 }
 
 // waitForVsockAgent polls the Firecracker vsock UDS multiplexer until a

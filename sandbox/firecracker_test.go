@@ -376,9 +376,8 @@ func TestFirecrackerBackend_DestroyCleansUpWorkDir(t *testing.T) {
 
 func TestFirecrackerBackend_RealBinaryIntegration(t *testing.T) {
 	// Skip unless a Firecracker binary, kernel, and rootfs are all available.
-	// Mirrors docker_test's "build the image yourself" pattern — the test
-	// asserts the integration works when the host has everything set up, but
-	// doesn't try to download multi-megabyte VM images in CI.
+	// The test asserts the integration works when the host has everything set
+	// up, but doesn't try to download multi-megabyte VM images in CI.
 	bin := os.Getenv("EMBERBOX_FIRECRACKER_BIN")
 	kernel := os.Getenv("EMBERBOX_FIRECRACKER_KERNEL")
 	rootfs := os.Getenv("EMBERBOX_FIRECRACKER_ROOTFS")

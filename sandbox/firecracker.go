@@ -27,10 +27,9 @@
 //   - RootfsPath is an ext4 image containing emberbox-agent built for the
 //     guest, invoked with --vsock-port=<AgentPort> (default 10000) at boot.
 //
-// Env injection (AllocRequest.Env) is not yet wired through to the guest. The
-// docker backend uses --env; firecracker needs either MMDS or a per-VM
-// cmdline append. Tracked as a follow-up; today FirecrackerBackend logs the
-// env count and continues.
+// Env injection (AllocRequest.Env) is not yet wired through to the guest.
+// Firecracker needs either MMDS or a per-VM cmdline append. Tracked as a
+// follow-up; today FirecrackerBackend logs the env count and continues.
 
 package sandbox
 
