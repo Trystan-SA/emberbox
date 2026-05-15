@@ -64,9 +64,12 @@ type AllocRequest struct {
 	Timeout            time.Duration
 	NetworkAccess      bool
 	ControlPlaneAccess bool
-	// Env is injected into the guest (firecracker) or made available to local
-	// tools via EnvFromContext (local mode). Consumers use this to pass
-	// per-task secrets like API tokens.
+	// Env carries per-allocation environment variables. Delivery depends on
+	// the backend: Docker passes them as --env to the container; HostBackend
+	// makes them available to in-process tools via EnvFromContext;
+	// FirecrackerBackend logs the count and currently ignores the values
+	// (guest-side injection via MMDS/cmdline isn't wired through yet).
+	// Consumers use this to pass per-task secrets like API tokens.
 	Env map[string]string
 }
 

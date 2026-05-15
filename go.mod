@@ -1,10 +1,11 @@
 module github.com/Trystan-SA/emberbox
 
-go 1.23.0
+go 1.25.0
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/sys v0.44.0
 )
 
 require (

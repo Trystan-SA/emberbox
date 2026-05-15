@@ -25,8 +25,8 @@ func TestAgent_HandleConnection_DispatchesAndResponds(t *testing.T) {
 	a := New(Config{Tools: r})
 
 	c1, c2 := net.Pipe()
-	defer c1.Close()
-	defer c2.Close()
+	defer func() { _ = c1.Close() }()
+	defer func() { _ = c2.Close() }()
 
 	go a.HandleConnection(context.Background(), c2)
 
@@ -45,8 +45,8 @@ func TestAgent_HandleConnection_UnknownTool(t *testing.T) {
 	a := New(Config{Tools: r})
 
 	c1, c2 := net.Pipe()
-	defer c1.Close()
-	defer c2.Close()
+	defer func() { _ = c1.Close() }()
+	defer func() { _ = c2.Close() }()
 
 	go a.HandleConnection(context.Background(), c2)
 
