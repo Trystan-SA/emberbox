@@ -14,9 +14,8 @@ import (
 )
 
 // envContextKey is the context key under which per-allocation env vars are
-// propagated to in-process tools running under HostBackend. In docker mode
-// the same map is delivered to the guest as --env on docker run; in
-// firecracker mode the values are not yet propagated into the guest.
+// propagated to in-process tools running under HostBackend. In firecracker
+// mode the values are not yet propagated into the guest.
 type envContextKey struct{}
 
 // EnvFromContext returns the per-allocation env map attached by HostBackend,

@@ -1,7 +1,7 @@
 // Backend defines the host-side abstraction over an isolation mechanism.
 // The Pool drives a Backend through the lifecycle of each sandboxed task;
-// concrete backends (host, docker, firecracker, ...) live in their own
-// files and are selected by Config.
+// concrete backends (host, firecracker, ...) live in their own files and
+// are selected by Config.
 
 package sandbox
 

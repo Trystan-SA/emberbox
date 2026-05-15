@@ -19,8 +19,8 @@ import (
 )
 
 // auditBackend wraps an inner Backend and counts every call. In production
-// you'd swap the inner HostBackend for a real DockerBackend or
-// FirecrackerBackend (or any other sandbox.Backend implementation).
+// you'd swap the inner HostBackend for a real FirecrackerBackend (or any
+// other sandbox.Backend implementation).
 type auditBackend struct {
 	inner    sandbox.Backend
 	boots    atomic.Int64

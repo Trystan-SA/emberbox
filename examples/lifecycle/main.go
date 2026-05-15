@@ -1,6 +1,6 @@
 // Lifecycle example: start a sandbox, list active sandboxes, run a command,
-// release it. Uses host mode so it works without docker or firecracker; the
-// same API works in those modes — just flip Config.Mode or pass Config.Backend.
+// release it. Uses host mode so it works without firecracker; the same API
+// works under firecracker — just flip Config.Mode or pass Config.Backend.
 //
 //	go run ./examples/lifecycle
 package main

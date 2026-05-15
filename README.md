@@ -4,16 +4,15 @@
 
 Emberbox is developed as the VM orchestration layer for [Forgebox](https://github.com/Trystan-SA/forgebox), a project for running AI agents in isolated environments. It's published as a standalone library so other Go projects can reuse the same sandbox/agent primitives.
 
-Sandboxes for LLM agents in Go. Pick your isolation level (host process, Docker container, or Firecracker microVM) behind one `sandbox.Backend` interface, with built-in tools (bash, file ops, web fetch) and an extensible tool/agent API.
+Sandboxes for LLM agents in Go. Pick your isolation level (host process or Firecracker microVM) behind one `sandbox.Backend` interface, with built-in tools (bash, file ops, web fetch) and an extensible tool/agent API.
 
-> **Status:** v0.2. Host mode is exercised in CI on every change. Docker mode is functional and has an integration test that runs locally when `emberbox-agent:test` is built (`docker build -t emberbox-agent:test .`); CI does not yet build that image, so the Docker path is verified by hand for now. Firecracker mode is functional: the backend launches real `firecracker` subprocesses, drives Firecracker's REST API over its UDS, and talks to the in-VM agent over vsock (via Firecracker's UDS multiplexer, so the host doesn't need AF_VSOCK). End-to-end with a real kernel/rootfs is exercised by `TestFirecrackerBackend_RealBinaryIntegration`, which skips unless `EMBERBOX_FIRECRACKER_BIN`, `_KERNEL`, and `_ROOTFS` are all set.
+> **Status:** v0.2. Host mode is exercised in CI on every change. Firecracker mode is functional: the backend launches real `firecracker` subprocesses, drives Firecracker's REST API over its UDS, and talks to the in-VM agent over vsock (via Firecracker's UDS multiplexer, so the host doesn't need AF_VSOCK). End-to-end with a real kernel/rootfs is exercised by `TestFirecrackerBackend_RealBinaryIntegration`, which skips unless `EMBERBOX_FIRECRACKER_BIN`, `_KERNEL`, and `_ROOTFS` are all set.
 
 ## Why
 
-Different tasks need different isolation. Quick validation needs cheap, ephemeral isolation. A long-running coding session needs a full Linux environment with files and tools. Sometimes a developer just wants to run tools against their own filesystem with no sandbox at all. Emberbox gives all three behind one API:
+Different tasks need different isolation. Quick validation needs cheap, ephemeral isolation. Sometimes a developer just wants to run tools against their own filesystem with no sandbox at all. Emberbox gives both behind one API:
 
 - **Host**: direct dispatch in the host process. No isolation. For the user who already has their environment set up and explicitly opts out.
-- **Docker**: one container per session, lives across many tool calls, full environment for complex tasks and project-scoped work.
 - **Firecracker**: per-task microVM (~125 ms boot, ~5 MB VMM overhead). Cheap enough to run thousands of times an hour for tiny, isolated validation workloads.
 
 ## Install
@@ -89,11 +88,11 @@ tools.RegisterDefaults(r)
 r.Register(MyTool{})
 ```
 
-For host mode, register against the registry you pass to `sandbox.Config.Tools`. For docker or firecracker mode, register inside your custom in-guest agent binary (build against `github.com/Trystan-SA/emberbox/agent`) and bake that binary into the image / rootfs the backend uses.
+For host mode, register against the registry you pass to `sandbox.Config.Tools`. For firecracker mode, register inside your custom in-guest agent binary (build against `github.com/Trystan-SA/emberbox/agent`) and bake that binary into the rootfs the backend uses.
 
 ## Testing your integration
 
-`sandboxtest.NewFake` returns a `*sandbox.Pool` running in host mode, useful for downstream consumers who want to test their dispatch logic without spinning up containers or VMs.
+`sandboxtest.NewFake` returns a `*sandbox.Pool` running in host mode, useful for downstream consumers who want to test their dispatch logic without spinning up VMs.
 
 ```go
 import "github.com/Trystan-SA/emberbox/sandbox/sandboxtest"
@@ -113,17 +112,12 @@ Runnable examples live under [`examples/`](./examples):
 - [`examples/lifecycle`](./examples/lifecycle): allocate a sandbox, list active sandboxes via `Pool.Status`, run a bash command, release.
 - [`examples/customtool`](./examples/customtool): register a custom `tool.Tool` alongside the built-ins and dispatch it.
 - [`examples/custombackend`](./examples/custombackend): plug a custom `sandbox.Backend` into the Pool (the same seam Firecracker slots into).
-- [`examples/dockerbackend`](./examples/dockerbackend): drive a real Docker container end-to-end.
 - [`examples/firecrackerbackend`](./examples/firecrackerbackend): spawn a Firecracker microVM and call a custom tool baked into the in-VM agent. Includes a runnable in-guest agent under [`examples/firecrackerbackend/agent`](./examples/firecrackerbackend/agent).
 
 ```bash
 go run ./examples/lifecycle
 go run ./examples/customtool
 go run ./examples/custombackend
-
-# Docker example: build the agent image first.
-docker build -t emberbox-agent:test .
-go run ./examples/dockerbackend
 
 # Firecracker example: one-shot setup downloads firecracker + kernel,
 # builds the custom agent, packages an ext4 rootfs, writes an .envrc.
@@ -147,7 +141,6 @@ type Backend interface {
 
 Built-ins:
 - `sandbox.NewHostBackend(r, workdir)`: in-process dispatch. No isolation. Selected by `Mode: ModeHost` (the default).
-- `sandbox.NewDockerBackend(cfg)`: one container per `Allocate`, reused across many `Execute` calls, torn down on `Release`. Talks to an in-container `emberbox-agent` over TCP. Build the image from the repo `Dockerfile`.
 - `sandbox.NewFirecrackerBackend(cfg)`: Firecracker microVMs for per-task isolation. Selected by `Mode: ModeFirecracker`. Each `Allocate` launches a real `firecracker` subprocess, configures it via REST API over a per-VM UDS, and talks to the in-VM `emberbox-agent` over vsock (Firecracker's UDS multiplexer handles the host side, so the host doesn't need AF_VSOCK). Requires `FirecrackerConfig.KernelPath` (vmlinux), `FirecrackerConfig.RootfsPath` (ext4 with `/usr/local/bin/emberbox-agent` invoked at boot with `--vsock-port=10000`), and a Firecracker-capable kernel on the host (KVM). Env injection from `AllocRequest.Env` is logged but not yet propagated into the guest; use a pre-baked rootfs or kernel cmdline for now.
 
 To plug in your own (cloud-hypervisor, kata, gVisor, a remote sandbox service, ...), pass it via `Config.Backend`:
@@ -162,12 +155,11 @@ pool, _ := sandbox.New(sandbox.Config{
 ## Packages
 
 - `tool/`: shared `Tool` interface, `Result`, `Registry`. Both `sandbox` and `agent` import this.
-- `sandbox/`: host-side `Pool`, `Allocate`, `Execute`, `Release`, `Shutdown`, plus the pluggable `Backend` interface and built-in `HostBackend` / `DockerBackend` / `FirecrackerBackend`.
+- `sandbox/`: host-side `Pool`, `Allocate`, `Execute`, `Release`, `Shutdown`, plus the pluggable `Backend` interface and built-in `HostBackend` / `FirecrackerBackend`.
 - `sandbox/sandboxtest/`: `NewFake` helper for downstream tests.
 - `agent/`: guest-side `Agent.Serve` listens for tool requests on a `net.Listener`.
 - `tools/`: built-in `Tool` implementations: bash, file_read, file_write, file_edit, glob, grep, web_fetch, plus `RegisterDefaults`.
-- `cmd/emberbox-agent/`: default in-guest agent binary. Run inside a container or microVM; talks to the host over TCP (Docker) or AF_VSOCK (Firecracker).
-- `Dockerfile`: multi-stage build for the `emberbox-agent` Alpine image used by `DockerBackend`.
+- `cmd/emberbox-agent/`: default in-guest agent binary. Run inside a Firecracker microVM; talks to the host over AF_VSOCK.
 
 ## License
 

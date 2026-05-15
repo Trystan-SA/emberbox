@@ -33,8 +33,8 @@ type Config struct {
 	// Mode picks a default Backend when Backend is nil. Defaults to ModeHost.
 	Mode Mode
 	// PoolSize is the number of sandboxes to pre-boot at startup. Backends for
-	// which Boot is expensive (firecracker, docker) benefit; HostBackend
-	// ignores it in practice (Boot is constant-time).
+	// which Boot is expensive (firecracker) benefit; HostBackend ignores it in
+	// practice (Boot is constant-time).
 	PoolSize int
 	// KernelPath is the guest kernel image. Used only when Backend is nil and
 	// Mode == ModeFirecracker.
@@ -50,8 +50,7 @@ type Config struct {
 	DefaultTimeout time.Duration
 	// Tools is the registry the default HostBackend dispatches against.
 	// Required when Backend is nil and Mode == ModeHost; ignored otherwise
-	// (in firecracker/docker modes the in-VM/in-container agent owns its
-	// own registry).
+	// (in firecracker mode the in-VM agent owns its own registry).
 	Tools *tool.Registry
 	// Logger is optional. Defaults to slog.Default() when nil.
 	Logger *slog.Logger
@@ -65,11 +64,10 @@ type AllocRequest struct {
 	NetworkAccess      bool
 	ControlPlaneAccess bool
 	// Env carries per-allocation environment variables. Delivery depends on
-	// the backend: Docker passes them as --env to the container; HostBackend
-	// makes them available to in-process tools via EnvFromContext;
-	// FirecrackerBackend logs the count and currently ignores the values
-	// (guest-side injection via MMDS/cmdline isn't wired through yet).
-	// Consumers use this to pass per-task secrets like API tokens.
+	// the backend: HostBackend makes them available to in-process tools via
+	// EnvFromContext; FirecrackerBackend logs the count and currently ignores
+	// the values (guest-side injection via MMDS/cmdline isn't wired through
+	// yet). Consumers use this to pass per-task secrets like API tokens.
 	Env map[string]string
 }
 
