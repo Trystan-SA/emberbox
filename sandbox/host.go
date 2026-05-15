@@ -1,5 +1,6 @@
 // HostBackend runs tools directly in the host process. NOT isolated;
 // intended for dev/test or when the user explicitly opts out of isolation.
+
 package sandbox
 
 import (
@@ -13,8 +14,9 @@ import (
 )
 
 // envContextKey is the context key under which per-allocation env vars are
-// propagated to in-process tools running under HostBackend. In firecracker
-// or docker modes the same map is delivered to the guest via boot config.
+// propagated to in-process tools running under HostBackend. In docker mode
+// the same map is delivered to the guest as --env on docker run; in
+// firecracker mode the values are not yet propagated into the guest.
 type envContextKey struct{}
 
 // EnvFromContext returns the per-allocation env map attached by HostBackend,
