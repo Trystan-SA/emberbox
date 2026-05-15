@@ -57,7 +57,7 @@ func main() {
 // when --vsock-port is non-zero.
 func makeListener(vsockPort uint, tcpAddr string) (net.Listener, string, error) {
 	if vsockPort != 0 {
-		ln, err := listenVsock(uint32(vsockPort))
+		ln, err := agent.ListenVsock(uint32(vsockPort))
 		if err != nil {
 			return nil, "vsock", err
 		}

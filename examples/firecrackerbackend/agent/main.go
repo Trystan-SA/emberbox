@@ -71,7 +71,7 @@ func main() {
 		Logger:  log,
 	})
 
-	ln, err := listenVsock(uint32(*vsockPort))
+	ln, err := agent.ListenVsock(uint32(*vsockPort))
 	if err != nil {
 		log.Error("[Emberbox/agent] vsock listen failed", "port", *vsockPort, "error", err)
 		os.Exit(1)
