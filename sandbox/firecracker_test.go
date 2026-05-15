@@ -64,7 +64,7 @@ func newFakeVMM() *fakeVMM {
 
 // defaultFakeAgent decodes one agentRequest and replies with a fixed Output.
 func defaultFakeAgent(c net.Conn) {
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	var req agentRequest
 	if err := json.NewDecoder(c).Decode(&req); err != nil {
 		return
@@ -109,8 +109,8 @@ func (v *fakeVMM) handle(w http.ResponseWriter, r *http.Request) {
 	v.puts = append(v.puts, fakeVMMPut{Path: r.URL.Path, Body: body})
 	v.mu.Unlock()
 
-	switch {
-	case r.URL.Path == "/vsock":
+	switch r.URL.Path {
+	case "/vsock":
 		var vs firecrackerVsock
 		if err := json.Unmarshal(body, &vs); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -120,7 +120,7 @@ func (v *fakeVMM) handle(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-	case r.URL.Path == "/actions":
+	case "/actions":
 		v.mu.Lock()
 		v.started = true
 		v.mu.Unlock()

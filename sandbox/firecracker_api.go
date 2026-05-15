@@ -103,7 +103,7 @@ func (c *firecrackerClient) putJSON(ctx context.Context, path string, body any) 
 	if err != nil {
 		return fmt.Errorf("PUT %s: %w", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(resp.Body)
 		return &firecrackerAPIError{Status: resp.StatusCode, Body: strings.TrimSpace(string(b))}

@@ -99,7 +99,7 @@ func (c *vsockBufferedConn) Read(b []byte) (int, error) { return c.br.Read(b) }
 // agentRoundTrip is the transport-agnostic agent protocol step: encode one
 // request, decode one response, close.
 func agentRoundTrip(ctx context.Context, conn net.Conn, toolName string, input json.RawMessage, timeout time.Duration) (*ExecResult, error) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(dl)
@@ -181,7 +181,7 @@ func vsockProbe(ctx context.Context, udsPath string, port uint32) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(dl)
 	} else {
